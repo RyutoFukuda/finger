@@ -1,115 +1,97 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>指カウント（最終安定版）</title>
+  <meta charset="UTF-8" />
+  <title>指カウント（iPhone対応版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
   <style>
-    html, body {
+    body {
       margin: 0;
-      padding: 0;
-      background: black;
       overflow: hidden;
-    }
-    #count {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 6vw;
-      font-weight: bold;
+      background: black;
       color: white;
+      font-size: 6vw;
+      text-align: center;
+      padding-top: 10vh;
+    }
+    video {
+      display: none;
+    }
+    #fingers {
       background: rgba(0, 0, 0, 0.6);
       padding: 10px 20px;
-      border-radius: 10px;
-      z-index: 10;
-    }
-    canvas {
-      width: 100vw;
-      height: 100vh;
-      transform: scaleX(-1);
+      border-radius: 12px;
+      display: inline-block;
     }
   </style>
 </head>
 <body>
-  <div id="count">Fingers: 0</div>
-  <video id="video" hidden playsinline muted></video>
-  <canvas id="canvas"></canvas>
+  <div id="fingers">Fingers: 0</div>
+  <video id="video" playsinline></video>
 
   <script>
     const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    const countDisplay = document.getElementById("count");
-
-    // 画面サイズに合わせて初回のみcanvasサイズ決定
-    let initialized = false;
-
-    function countFingers(landmarks, handedness) {
-      if (!landmarks) return 0;
-      let count = 0;
-
-      if (handedness === "Right") {
-        if (landmarks[4].x < landmarks[3].x) count++;
-      } else {
-        if (landmarks[4].x > landmarks[3].x) count++;
-      }
-
-      [8, 12, 16, 20].forEach((tip) => {
-        if (landmarks[tip].y < landmarks[tip - 2].y) count++;
-      });
-
-      return count;
-    }
+    const fingersEl = document.getElementById("fingers");
 
     const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
 
     hands.setOptions({
       maxNumHands: 1,
-      modelComplexity: 0, // 軽い
+      modelComplexity: 0, // 軽量
       minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.3,
+      minTrackingConfidence: 0.3
     });
 
     hands.onResults((results) => {
-      if (!initialized) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        initialized = true;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
       if (results.multiHandLandmarks && results.multiHandedness) {
-        const landmarks = results.multiHandLandmarks[0];
-        const handedness = results.multiHandedness[0].classification[0].label;
+        const lm = results.multiHandLandmarks[0];
+        const handLabel = results.multiHandedness[0].classification[0].label;
 
-        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
-        drawLandmarks(ctx, landmarks, { color: "#FF0000", lineWidth: 1 });
+        let count = 0;
 
-        const count = countFingers(landmarks, handedness);
-        countDisplay.innerText = `Fingers: ${count}`;
+        if (handLabel === "Right") {
+          if (lm[4].x < lm[3].x) count++;
+        } else {
+          if (lm[4].x > lm[3].x) count++;
+        }
+
+        [8, 12, 16, 20].forEach((tip) => {
+          if (lm[tip].y < lm[tip - 2].y) count++;
+        });
+
+        fingersEl.innerText = `Fingers: ${count}`;
       } else {
-        countDisplay.innerText = "Fingers: 0";
+        fingersEl.innerText = "Fingers: 0";
       }
     });
 
-    const camera = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 640,
-      height: 480,
-      facingMode: "user",
-    });
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: 640,
+          height: 480
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      runDetection();
+    }
 
-    camera.start();
+    async function runDetection() {
+      const loop = async () => {
+        await hands.send({ image: video });
+        requestAnimationFrame(loop);
+      };
+      loop();
+    }
+
+    startCamera();
   </script>
 </body>
 </html>
