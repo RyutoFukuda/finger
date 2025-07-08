@@ -1,118 +1,114 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>指カウント（MediaPipe版）</title>
+  <meta charset="UTF-8" />
+  <title>指カウント（最新版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- MediaPipe Hands & utils -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
   <style>
-    html, body {
+    body {
       margin: 0;
-      padding: 0;
       background: black;
-      overflow: hidden;
-    }
-    video, canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      transform: scaleX(-1); /* 鏡のように反転 */
-    }
-    #count {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 6vw;
-      font-weight: bold;
       color: white;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 10px 20px;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #startBtn {
+      margin-top: 40vh;
+      font-size: 8vw;
+      padding: 20px 40px;
+      border: none;
+      border-radius: 12px;
+      background: #28a745;
+      color: white;
+    }
+    #fingers {
+      margin-top: 20px;
+      font-size: 10vw;
+      display: none;
+      padding: 20px 30px;
       border-radius: 10px;
-      z-index: 10;
+      background: rgba(0, 0, 0, 0.6);
+    }
+    video {
+      width: 100%;
+      height: auto;
+      display: none;
     }
   </style>
 </head>
 <body>
-  <div id="count">Fingers: 0</div>
-  <video id="video" playsinline></video>
-  <canvas id="canvas"></canvas>
+  <button id="startBtn">▶ スタート</button>
+  <div id="fingers">Fingers: -</div>
+  <video id="video" playsinline muted></video>
 
   <script>
-    const videoElement = document.getElementById('video');
-    const canvasElement = document.getElementById('canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const countDisplay = document.getElementById('count');
-
-    function countFingers(landmarks, handedness) {
-      if (!landmarks) return 0;
-      let count = 0;
-
-      // 親指（左右で判定反転）
-      if (handedness === 'Right') {
-        if (landmarks[4].x < landmarks[3].x) count++;
-      } else {
-        if (landmarks[4].x > landmarks[3].x) count++;
-      }
-
-      // 他の指（y軸で判定）
-      [8, 12, 16, 20].forEach((tip) => {
-        if (landmarks[tip].y < landmarks[tip - 2].y) count++;
-      });
-
-      return count;
-    }
+    const video = document.getElementById("video");
+    const fingersEl = document.getElementById("fingers");
+    const startBtn = document.getElementById("startBtn");
 
     const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
 
     hands.setOptions({
       maxNumHands: 1,
       modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
     });
 
     hands.onResults((results) => {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
       if (results.multiHandLandmarks && results.multiHandedness) {
-        const landmarks = results.multiHandLandmarks[0];
-        const handedness = results.multiHandedness[0].classification[0].label;
+        const lm = results.multiHandLandmarks[0];
+        const label = results.multiHandedness[0].classification[0].label;
+        let count = 0;
 
-        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1 });
+        // 親指
+        if (label === "Right") {
+          if (lm[4].x < lm[3].x) count++;
+        } else {
+          if (lm[4].x > lm[3].x) count++;
+        }
 
-        const fingerCount = countFingers(landmarks, handedness);
-        countDisplay.innerText = `Fingers: ${fingerCount}`;
+        // 残りの指
+        [8, 12, 16, 20].forEach(i => {
+          if (lm[i].y < lm[i - 2].y) count++;
+        });
+
+        fingersEl.innerText = `Fingers: ${count}`;
       } else {
-        countDisplay.innerText = "Fingers: 0";
+        fingersEl.innerText = `指が見つかりません`;
       }
-
-      canvasCtx.restore();
     });
 
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await hands.send({ image: videoElement });
-      },
-      width: 640,
-      height: 480,
-      facingMode: "user"
-    });
+    async function startApp() {
+      startBtn.style.display = "none";
+      fingersEl.style.display = "inline-block";
+      video.style.display = "block";
 
-    camera.start();
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: 1280, height: 720 },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+        console.log("カメラ起動成功");
+
+        const loop = async () => {
+          await hands.send({ image: video });
+          requestAnimationFrame(loop);
+        };
+        loop();
+
+      } catch (err) {
+        alert("カメラアクセスが許可されていないか、失敗しました。設定→Safari→カメラを確認してください。");
+        console.error("getUserMedia error:", err);
+      }
+    }
+
+    startBtn.addEventListener("click", startApp);
   </script>
 </body>
 </html>
