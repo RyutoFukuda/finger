@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>指カウント（軽量安定版）</title>
+  <title>指カウント（最終安定版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
@@ -13,15 +13,6 @@
       padding: 0;
       background: black;
       overflow: hidden;
-    }
-    video, canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      transform: scaleX(-1);
     }
     #count {
       position: absolute;
@@ -36,32 +27,41 @@
       border-radius: 10px;
       z-index: 10;
     }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      transform: scaleX(-1);
+    }
   </style>
 </head>
 <body>
   <div id="count">Fingers: 0</div>
-  <video id="video" playsinline muted></video>
+  <video id="video" hidden playsinline muted></video>
   <canvas id="canvas"></canvas>
 
   <script>
-    const videoElement = document.getElementById('video');
-    const canvasElement = document.getElementById('canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const countDisplay = document.getElementById('count');
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const countDisplay = document.getElementById("count");
+
+    // 画面サイズに合わせて初回のみcanvasサイズ決定
+    let initialized = false;
 
     function countFingers(landmarks, handedness) {
       if (!landmarks) return 0;
       let count = 0;
-      // 親指
-      if (handedness === 'Right') {
+
+      if (handedness === "Right") {
         if (landmarks[4].x < landmarks[3].x) count++;
       } else {
         if (landmarks[4].x > landmarks[3].x) count++;
       }
-      // 他の指（人差し指〜小指）
-      [8, 12, 16, 20].forEach(tip => {
+
+      [8, 12, 16, 20].forEach((tip) => {
         if (landmarks[tip].y < landmarks[tip - 2].y) count++;
       });
+
       return count;
     }
 
@@ -71,39 +71,42 @@
 
     hands.setOptions({
       maxNumHands: 1,
-      modelComplexity: 0, // 軽量版
+      modelComplexity: 0, // 軽い
       minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.3, // 追跡しやすく
+      minTrackingConfidence: 0.3,
     });
 
     hands.onResults((results) => {
-      canvasElement.width = videoElement.videoWidth;
-      canvasElement.height = videoElement.videoHeight;
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      if (!initialized) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        initialized = true;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
       if (results.multiHandLandmarks && results.multiHandedness) {
         const landmarks = results.multiHandLandmarks[0];
         const handedness = results.multiHandedness[0].classification[0].label;
-        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1 });
 
-        const fingerCount = countFingers(landmarks, handedness);
-        countDisplay.innerText = `Fingers: ${fingerCount}`;
+        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
+        drawLandmarks(ctx, landmarks, { color: "#FF0000", lineWidth: 1 });
+
+        const count = countFingers(landmarks, handedness);
+        countDisplay.innerText = `Fingers: ${count}`;
       } else {
-        countDisplay.innerText = `Fingers: 0`;
+        countDisplay.innerText = "Fingers: 0";
       }
-      canvasCtx.restore();
     });
 
-    const camera = new Camera(videoElement, {
+    const camera = new Camera(video, {
       onFrame: async () => {
-        await hands.send({ image: videoElement });
+        await hands.send({ image: video });
       },
       width: 640,
       height: 480,
-      facingMode: 'user',
+      facingMode: "user",
     });
 
     camera.start();
