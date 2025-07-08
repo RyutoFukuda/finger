@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>指カウント（最新版）</title>
+  <title>指カウント（最新）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
   <style>
@@ -94,7 +94,7 @@
         });
         video.srcObject = stream;
         await video.play();
-        console.log("カメラ起動成功");
+        console.log("📷 カメラ起動成功");
 
         const loop = async () => {
           await hands.send({ image: video });
@@ -103,7 +103,7 @@
         loop();
 
       } catch (err) {
-        alert("カメラアクセスが許可されていないか、失敗しました。設定→Safari→カメラを確認してください。");
+        alert("カメラのアクセスが許可されていないか、失敗しました。設定→Safari→カメラを確認してください。");
         console.error("getUserMedia error:", err);
       }
     }
