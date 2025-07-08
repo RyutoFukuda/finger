@@ -2,34 +2,32 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>指カウント</title>
+  <title>指カウント（MediaPipe版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- TensorFlow.js & handpose -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <!-- MediaPipe Hands & utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <style>
     html, body {
       margin: 0;
       padding: 0;
-      overflow: hidden;
       background: black;
+      overflow: hidden;
     }
-
-    #video, #canvas {
+    video, canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: cover;
+      transform: scaleX(-1); /* 鏡のように反転 */
     }
-
     #count {
-      position: fixed;
+      position: absolute;
       top: 10px;
       left: 50%;
       transform: translateX(-50%);
@@ -39,85 +37,82 @@
       background: rgba(0, 0, 0, 0.6);
       padding: 10px 20px;
       border-radius: 10px;
-      z-index: 1000;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
   <div id="count">Fingers: 0</div>
-  <video id="video" autoplay playsinline muted></video>
+  <video id="video" playsinline></video>
   <canvas id="canvas"></canvas>
 
   <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvasCtx = canvasElement.getContext('2d');
     const countDisplay = document.getElementById('count');
 
-    async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-      video.srcObject = stream;
-      return new Promise((resolve) => {
-        video.onloadedmetadata = () => resolve(video);
-      });
-    }
-
-    function countFingers(annotations) {
-      if (!annotations) return 0;
-      const fingers = ['indexFinger', 'middleFinger', 'ringFinger', 'pinky'];
+    function countFingers(landmarks, handedness) {
+      if (!landmarks) return 0;
       let count = 0;
-      fingers.forEach(name => {
-        const tip = annotations[name][3];
-        const pip = annotations[name][1];
-        if (tip[1] < pip[1]) count++;
+
+      // 親指（左右で判定反転）
+      if (handedness === 'Right') {
+        if (landmarks[4].x < landmarks[3].x) count++;
+      } else {
+        if (landmarks[4].x > landmarks[3].x) count++;
+      }
+
+      // 他の指（y軸で判定）
+      [8, 12, 16, 20].forEach((tip) => {
+        if (landmarks[tip].y < landmarks[tip - 2].y) count++;
       });
 
-      // 親指の検出（x軸）
-      const thumb_tip = annotations.thumb[3];
-      const thumb_ip = annotations.thumb[1];
-      if (thumb_tip[0] > thumb_ip[0]) count++;
       return count;
     }
 
-    async function main() {
-      await setupCamera();
-      const model = await handpose.load();
-      video.play();
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
 
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
 
-      async function detect() {
-        const predictions = await model.estimateHands(video, true);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hands.onResults((results) => {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-        if (predictions.length > 0) {
-          const landmarks = predictions[0].landmarks;
-          const annotations = predictions[0].annotations;
+      if (results.multiHandLandmarks && results.multiHandedness) {
+        const landmarks = results.multiHandLandmarks[0];
+        const handedness = results.multiHandedness[0].classification[0].label;
 
-          landmarks.forEach(point => {
-            const [x, y] = point;
-            const drawX = (x / video.videoWidth) * canvas.width;
-            const drawY = (y / video.videoHeight) * canvas.height;
-            ctx.beginPath();
-            ctx.arc(drawX, drawY, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = "red";
-            ctx.fill();
-          });
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1 });
 
-          const count = countFingers(annotations);
-          countDisplay.innerText = `Fingers: ${count}`;
-        } else {
-          countDisplay.innerText = `Fingers: 0`;
-        }
-
-        requestAnimationFrame(detect);
+        const fingerCount = countFingers(landmarks, handedness);
+        countDisplay.innerText = `Fingers: ${fingerCount}`;
+      } else {
+        countDisplay.innerText = "Fingers: 0";
       }
 
-      detect();
-    }
+      canvasCtx.restore();
+    });
 
-    main();
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480,
+      facingMode: "user"
+    });
+
+    camera.start();
   </script>
 </body>
 </html>
