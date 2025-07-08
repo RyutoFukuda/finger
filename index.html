@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Web Finger Counter</title>
+  <style>
+    canvas { position: absolute; left: 0; top: 0; z-index: 1; }
+    video  { position: absolute; left: 0; top: 0; z-index: 0; transform: scaleX(-1); }
+    #count { position: absolute; top: 10px; left: 10px; font-size: 24px; color: lime; background: black; padding: 5px; }
+  </style>
+</head>
+<body>
+  <div id="count">Fingers: 0</div>
+  <video id="video" autoplay muted playsinline width="640" height="480"></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
+
+  <!-- MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const countDisplay = document.getElementById('count');
+
+    function countFingers(landmarks) {
+      if (!landmarks) return 0;
+      let count = 0;
+      // 親指
+      if (landmarks[4].x < landmarks[3].x) count++;
+      // 他の指（人差し〜小指）
+      [8, 12, 16, 20].forEach(tip => {
+        if (landmarks[tip].y < landmarks[tip - 2].y) count++;
+      });
+      return count;
+    }
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
+
+    hands.onResults((results) => {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      if (results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1 });
+        const count = countFingers(landmarks);
+        countDisplay.innerText = `Fingers: ${count}`;
+      }
+      canvasCtx.restore();
+    });
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480,
+    });
+    camera.start();
+  </script>
+</body>
+</html>
