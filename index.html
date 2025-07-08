@@ -23,7 +23,7 @@
       color: white;
     }
     #fingers {
-      margin-top: 40vh;
+      margin-top: 20px;
       font-size: 10vw;
       display: none;
       padding: 20px 30px;
@@ -32,7 +32,9 @@
       display: inline-block;
     }
     video {
-      display: none;
+      width: 100%;
+      height: auto;
+      display: block; /* ← 修正 */
     }
   </style>
 </head>
@@ -86,7 +88,9 @@
           audio: false
         });
         video.srcObject = stream;
-        await video.play().catch(e => {
+        await video.play().then(() => {
+          console.log("カメラ起動成功");
+        }).catch(e => {
           alert("カメラ再生に失敗しました。Safariのカメラ許可を確認してください。");
           console.error(e);
         });
