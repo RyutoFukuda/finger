@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>指カウント（iPhone対応）</title>
+  <title>指カウント（iPhone対応・最新版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
   <style>
@@ -10,25 +10,25 @@
       margin: 0;
       background: black;
       color: white;
+      font-family: sans-serif;
       text-align: center;
-      font-size: 6vw;
     }
     #startBtn {
       margin-top: 40vh;
-      font-size: 7vw;
+      font-size: 8vw;
       padding: 20px 40px;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       background: #28a745;
       color: white;
     }
     #fingers {
       margin-top: 40vh;
-      display: none;
       font-size: 10vw;
-      background: rgba(0,0,0,0.6);
+      display: none;
       padding: 20px 30px;
-      border-radius: 12px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.6);
       display: inline-block;
     }
     video {
@@ -60,19 +60,19 @@
     hands.onResults((results) => {
       if (results.multiHandLandmarks && results.multiHandedness) {
         const lm = results.multiHandLandmarks[0];
-        const handLabel = results.multiHandedness[0].classification[0].label;
+        const label = results.multiHandedness[0].classification[0].label;
         let count = 0;
-        if (handLabel === "Right") {
+        if (label === "Right") {
           if (lm[4].x < lm[3].x) count++;
         } else {
           if (lm[4].x > lm[3].x) count++;
         }
-        [8, 12, 16, 20].forEach((tip) => {
-          if (lm[tip].y < lm[tip - 2].y) count++;
+        [8, 12, 16, 20].forEach(i => {
+          if (lm[i].y < lm[i - 2].y) count++;
         });
         fingersEl.innerText = `Fingers: ${count}`;
       } else {
-        fingersEl.innerText = "Fingers: 0";
+        fingersEl.innerText = `Fingers: 0`;
       }
     });
 
@@ -80,22 +80,30 @@
       startBtn.style.display = "none";
       fingersEl.style.display = "inline-block";
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
-        audio: false
-      });
-      video.srcObject = stream;
-      await video.play();
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: 640, height: 480 },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play().catch(e => {
+          alert("カメラ再生に失敗しました。Safariのカメラ許可を確認してください。");
+          console.error(e);
+        });
 
-      const loop = async () => {
-        try {
-          await hands.send({ image: video });
-        } catch (e) {
-          console.error("MediaPipe error:", e);
-        }
-        requestAnimationFrame(loop);
-      };
-      loop();
+        const loop = async () => {
+          try {
+            await hands.send({ image: video });
+          } catch (e) {
+            console.error("MediaPipe error:", e);
+          }
+          requestAnimationFrame(loop);
+        };
+        loop();
+      } catch (err) {
+        alert("カメラのアクセスが許可されていません。設定 > Safari > カメラ を確認してください。");
+        console.error("getUserMedia error:", err);
+      }
     }
 
     startBtn.addEventListener("click", startApp);
